@@ -6,6 +6,8 @@ and it works. Runs on macOS 14 Sonoma and newer.
 
 ### [Download the latest release →](https://github.com/layton-brewer/LiveWall/releases/latest)
 
+![LiveWall setting a video as the desktop wallpaper](demo.gif)
+
 ## What it does
 
 Drop a video on a display in the app and it becomes your wallpaper — looping,

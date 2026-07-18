@@ -15,8 +15,9 @@ dist/
 # macOS
 .DS_Store
 
-# Demo/screen recordings kept out of the repo (GitHub has a 100MB limit;
-# the README demo is handled separately)
+# Demo/screen recordings kept out of the repo (GitHub has a 100MB limit) —
+# except the small README demo GIF, which is meant to be committed
 *.mov
 *.mp4
 *.gif
+!demo.gif
