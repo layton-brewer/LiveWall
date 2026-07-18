@@ -1,8 +1,7 @@
 # LiveWall
 
 Puts a video on your desktop as wallpaper. That's it — no subscription, no
-account, no watermark, no "pro" version hiding behind a paywall. Download it
-and it works. Runs on macOS 14 Sonoma and newer.
+account, no watermark, no "pro" version hiding behind a paywall. Runs on macOS 14 Sonoma and newer.
 
 ### [Download the latest release →](https://github.com/layton-brewer/LiveWall/releases/latest)
 
