@@ -1,0 +1,16 @@
+# Xcode build products and derived data
+build/
+DerivedData/
+*.xcarchive
+
+# Xcode user-specific state (not meant to be shared)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Packaged app output
+*.dmg
+dist/
+
+# macOS
+.DS_Store
