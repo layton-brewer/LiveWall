@@ -2,7 +2,7 @@
 
 Puts a video on your desktop as wallpaper. That's it — no subscription, no
 account, no watermark, no "pro" version hiding behind a paywall. Download it
-and it works.
+and it works. Macos 26+ supported.
 
 ### [Download the latest release →](https://github.com/layton-brewer/LiveWall/releases/latest)
 
