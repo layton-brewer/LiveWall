@@ -6,7 +6,7 @@ import SwiftUI
 final class StatusItemController: NSObject, NSWindowDelegate {
     /// Must match SettingsView's own `.frame(width:height:)` so AppKit's
     /// window size and SwiftUI's content size always agree.
-    private static let panelContentSize = NSSize(width: 380, height: 345)
+    private static let panelContentSize = NSSize(width: 380, height: 376)
 
     private let statusItem: NSStatusItem
     private let panel: SettingsPanel
@@ -26,17 +26,27 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         hostingController.sizingOptions = []
         hostingController.view.autoresizingMask = [.width, .height]
 
-        // Real Liquid Glass: embed the SwiftUI content inside a glass pane
-        // instead of drawing a plain translucent backdrop behind it.
-        let glass = NSGlassEffectView()
-        glass.style = .regular
-        glass.cornerRadius = 14
-        glass.contentView = hostingController.view
+        // Real Liquid Glass where the OS has it; the classic frosted
+        // NSVisualEffectView with rounded corners everywhere else.
+        let backdropController = NSViewController()
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.style = .regular
+            glass.cornerRadius = 14
+            glass.contentView = hostingController.view
+            backdropController.view = glass
+        } else {
+            let effect = NSVisualEffectView()
+            effect.material = .popover
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.maskImage = Self.roundedCornerMask(radius: 14)
+            hostingController.view.frame = effect.bounds
+            effect.addSubview(hostingController.view)
+            backdropController.view = effect
+        }
 
-        let glassController = NSViewController()
-        glassController.view = glass
-
-        panel = SettingsPanel(contentViewController: glassController)
+        panel = SettingsPanel(contentViewController: backdropController)
         panel.setContentSize(Self.panelContentSize)
         super.init()
 
@@ -104,6 +114,20 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         } else {
             closePanel()
         }
+    }
+
+    /// A stretchable rounded-rect image for NSVisualEffectView's mask —
+    /// how you get rounded corners on a blur view before Liquid Glass.
+    private static func roundedCornerMask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private func deferCloseUntilMouseUp() {

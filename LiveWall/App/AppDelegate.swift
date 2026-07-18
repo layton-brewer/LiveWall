@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         engine = WallpaperEngine()
         statusItemController = StatusItemController(engine: engine)
+
+        UpdateChecker.shared.checkIfDue()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -53,6 +53,28 @@ enum AerialInstaller {
         )
     }
 
+    /// Where the wallpaper system keeps the current selection — which
+    /// wallpaper and screen saver are actually active right now. A separate
+    /// file from the manifest: the manifest is the menu, this is the order.
+    private static var indexPlistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+            "Library/Application Support/com.apple.wallpaper/Store/Index.plist"
+        )
+    }
+
+    private static var indexBackupURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+            "Library/Application Support/LiveWall/Index.plist.original"
+        )
+    }
+
+    /// Older versions of macOS keep aerials in a root-owned system
+    /// directory instead of this per-user store, so the whole trick only
+    /// works where the store exists.
+    static var isSupported: Bool {
+        FileManager.default.fileExists(atPath: manifestURL.path)
+    }
+
     static var isInstalled: Bool {
         guard let manifest = try? loadManifest(),
               let categories = manifest["categories"] as? [[String: Any]] else {
@@ -120,7 +142,73 @@ enum AerialInstaller {
         manifest["assets"] = assets
         manifest["categories"] = categories
         try writeManifest(manifest)
+
+        // Registering makes the video available; this makes it the actual
+        // active wallpaper and screen saver, so nobody has to go pick it
+        // in System Settings by hand.
+        try makeActiveSelection()
+
         refreshWallpaperAgent()
+    }
+
+    /// Writes the LiveWall aerial into the selection store — the same
+    /// result as clicking its tile in System Settings, minus the trip to
+    /// System Settings. Each section of the file carries a tiny embedded
+    /// plist naming the chosen asset; "Desktop" is the wallpaper and
+    /// "Idle" is the screen saver.
+    private static func makeActiveSelection() throws {
+        let configuration = try PropertyListSerialization.data(
+            fromPropertyList: ["assetID": assetID], format: .binary, options: 0
+        )
+        let optionValues = try PropertyListSerialization.data(
+            fromPropertyList: ["values": [String: Any]()], format: .binary, options: 0
+        )
+        let content: [String: Any] = [
+            "Choices": [[
+                "Provider": "com.apple.wallpaper.choice.aerials",
+                "Files": [Any](),
+                "Configuration": configuration,
+            ]],
+            "Shuffle": "$null",
+            "EncodedOptionValues": optionValues,
+        ]
+        let now = Date()
+        let group: [String: Any] = [
+            "Desktop": ["Content": content, "LastSet": now, "LastUse": now],
+            "Idle": ["Content": content, "LastSet": now, "LastUse": now],
+            "Type": "individual",
+        ]
+
+        // Start from the existing file so per-display and per-Space setups
+        // the user has made are left alone, and keep a copy of the
+        // original the first time we ever touch it.
+        var index: [String: Any] = [:]
+        if let data = try? Data(contentsOf: indexPlistURL),
+           let existing = try? PropertyListSerialization.propertyList(
+               from: data, options: [], format: nil
+           ) as? [String: Any] {
+            index = existing
+            if !FileManager.default.fileExists(atPath: indexBackupURL.path) {
+                try? FileManager.default.createDirectory(
+                    at: indexBackupURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? data.write(to: indexBackupURL)
+            }
+        }
+        index["AllSpacesAndDisplays"] = group
+        index["SystemDefault"] = group
+        if index["Displays"] == nil { index["Displays"] = [String: Any]() }
+        if index["Spaces"] == nil { index["Spaces"] = [String: Any]() }
+
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: index, format: .binary, options: 0
+        )
+        try FileManager.default.createDirectory(
+            at: indexPlistURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: indexPlistURL, options: .atomic)
     }
 
     static func uninstall() throws {

@@ -1,14 +1,19 @@
+import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
 /// One card per display: drop zone with thumbnail preview plus scaling,
-/// mute/volume, file picker, and remove controls.
+/// mute/volume, file picker, trim, and remove controls.
 struct DisplayCardView: View {
     let state: DisplayState
     @ObservedObject var engine: WallpaperEngine
 
     @State private var isDropTargeted = false
     @State private var thumbnail: NSImage?
+    @State private var isTrimExpanded = false
+    @State private var videoDuration: Double?
+    @State private var trimStart: Double = 0
+    @State private var trimEnd: Double = 0
 
     private static let allowedExtensions: Set<String> = ["mov", "mp4", "m4v"]
 
@@ -34,6 +39,10 @@ struct DisplayCardView: View {
             }
 
             controls
+
+            if isTrimExpanded {
+                trimEditor
+            }
         }
         .padding(12)
         .background(
@@ -78,6 +87,10 @@ struct DisplayCardView: View {
             return true
         } isTargeted: { isDropTargeted = $0 }
         .task(id: state.videoURL) {
+            // A different video means the old thumbnail, duration, and trim
+            // handles are all stale.
+            isTrimExpanded = false
+            videoDuration = nil
             guard let url = state.videoURL else {
                 thumbnail = nil
                 return
@@ -113,7 +126,7 @@ struct DisplayCardView: View {
                     get: { Double(state.volume) },
                     set: { engine.setVolume(Float($0), for: state.id) }
                 ), in: 0...1)
-                .frame(width: 70)
+                .frame(width: 60)
             }
 
             Spacer()
@@ -121,6 +134,14 @@ struct DisplayCardView: View {
             Button("Choose…") {
                 chooseFile()
             }
+
+            Button {
+                toggleTrimEditor()
+            } label: {
+                Image(systemName: "scissors")
+            }
+            .disabled(state.videoURL == nil)
+            .help("Trim the loop")
 
             Button {
                 engine.removeVideo(from: state.id)
@@ -131,6 +152,99 @@ struct DisplayCardView: View {
             .help("Remove wallpaper")
         }
         .controlSize(.small)
+    }
+
+    private var trimEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let videoDuration, videoDuration > 0 {
+                HStack(spacing: 8) {
+                    Text("Start")
+                        .font(.caption)
+                        .frame(width: 32, alignment: .leading)
+                    Slider(value: $trimStart, in: 0...videoDuration) { editing in
+                        if !editing { commitTrim() }
+                    }
+                    Text(timeString(trimStart))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 48, alignment: .trailing)
+                }
+                HStack(spacing: 8) {
+                    Text("End")
+                        .font(.caption)
+                        .frame(width: 32, alignment: .leading)
+                    Slider(value: $trimEnd, in: 0...videoDuration) { editing in
+                        if !editing { commitTrim() }
+                    }
+                    Text(timeString(trimEnd))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 48, alignment: .trailing)
+                }
+                HStack {
+                    Text("Loops \(timeString(trimStart)) – \(timeString(trimEnd))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Reset") {
+                        trimStart = 0
+                        trimEnd = videoDuration
+                        engine.setTrim(start: nil, end: nil, for: state.id)
+                    }
+                    .controlSize(.small)
+                }
+            } else {
+                Text("Reading video length…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task(id: state.videoURL) {
+            await loadDuration()
+        }
+    }
+
+    private func toggleTrimEditor() {
+        isTrimExpanded.toggle()
+        if isTrimExpanded, videoDuration == nil {
+            Task { await loadDuration() }
+        }
+    }
+
+    private func loadDuration() async {
+        guard let url = state.videoURL else { return }
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration).seconds,
+              duration.isFinite, duration > 0 else { return }
+        videoDuration = duration
+        trimStart = state.trimStart ?? 0
+        trimEnd = state.trimEnd ?? duration
+    }
+
+    private func commitTrim() {
+        guard let videoDuration else { return }
+        // Keep at least half a second between the handles, since a shorter
+        // loop than that isn't really a loop.
+        if trimEnd - trimStart < 0.5 {
+            trimStart = max(0, min(trimStart, trimEnd - 0.5))
+            trimEnd = min(videoDuration, max(trimEnd, trimStart + 0.5))
+        }
+        // Handles at the very ends mean "whole file" — store that as no
+        // trim at all.
+        if trimStart <= 0.01 && trimEnd >= videoDuration - 0.01 {
+            engine.setTrim(start: nil, end: nil, for: state.id)
+        } else {
+            engine.setTrim(start: trimStart, end: trimEnd, for: state.id)
+        }
+    }
+
+    private func timeString(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%d:%02d", minutes, secs)
     }
 
     private func chooseFile() {

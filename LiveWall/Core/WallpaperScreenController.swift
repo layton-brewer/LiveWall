@@ -58,18 +58,18 @@ final class WallpaperScreenController {
         window.setFrame(screen.frame, display: true)
     }
 
-    func load(url: URL, scaling: ScalingMode, muted: Bool, volume: Float) {
+    func load(
+        url: URL,
+        scaling: ScalingMode,
+        muted: Bool,
+        volume: Float,
+        trimStart: Double? = nil,
+        trimEnd: Double? = nil
+    ) {
         clear()
 
         videoURL = url
         accessingSecurityScope = url.startAccessingSecurityScopedResource()
-
-        let item = AVPlayerItem(url: url)
-        // AVFoundation happily buffers a big chunk of video ahead by
-        // default, which adds up fast on an 8K file. This is a local file
-        // on a loop — a few seconds of read-ahead is plenty, and it keeps
-        // the memory footprint down.
-        item.preferredForwardBufferDuration = 5
 
         let queuePlayer = AVQueuePlayer()
         queuePlayer.isMuted = muted
@@ -77,13 +77,48 @@ final class WallpaperScreenController {
         // A wallpaper video should never be the reason your Mac won't sleep.
         queuePlayer.preventsDisplaySleepDuringVideoPlayback = false
 
-        looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
+        looper = Self.makeLooper(player: queuePlayer, url: url, trimStart: trimStart, trimEnd: trimEnd)
         player = queuePlayer
         playerView.playerLayer.player = queuePlayer
         playerView.playerLayer.videoGravity = scaling.videoGravity
 
         window.setFrame(screen.frame, display: true)
         window.orderFront(nil)
+    }
+
+    /// Swaps the loop range without tearing down the whole player. Trimming
+    /// is non-destructive — the file is untouched, the looper just plays a
+    /// slice of it.
+    func setTrim(start: Double?, end: Double?) {
+        guard let player, let videoURL else { return }
+        looper?.disableLooping()
+        player.removeAllItems()
+        looper = Self.makeLooper(player: player, url: videoURL, trimStart: start, trimEnd: end)
+    }
+
+    private static func makeLooper(
+        player: AVQueuePlayer,
+        url: URL,
+        trimStart: Double?,
+        trimEnd: Double?
+    ) -> AVPlayerLooper {
+        let item = AVPlayerItem(url: url)
+        // AVFoundation happily buffers a big chunk of video ahead by
+        // default, which adds up fast on an 8K file. This is a local file
+        // on a loop — a few seconds of read-ahead is plenty, and it keeps
+        // the memory footprint down.
+        item.preferredForwardBufferDuration = 5
+
+        // Only honor a trim that's actually a real slice — at least half a
+        // second long, starting inside the file.
+        if let trimStart, let trimEnd, trimStart >= 0, trimEnd - trimStart >= 0.5 {
+            let range = CMTimeRange(
+                start: CMTime(seconds: trimStart, preferredTimescale: 600),
+                end: CMTime(seconds: trimEnd, preferredTimescale: 600)
+            )
+            return AVPlayerLooper(player: player, templateItem: item, timeRange: range)
+        }
+        return AVPlayerLooper(player: player, templateItem: item)
     }
 
     func clear() {

@@ -11,6 +11,7 @@ struct PreferencesView: View {
     @State private var aerialInstalled = AerialInstaller.isInstalled
     @State private var aerialError: String?
     @State private var aerialBusy = false
+    @ObservedObject private var updateChecker = UpdateChecker.shared
 
     var body: some View {
         ScrollView {
@@ -38,6 +39,8 @@ struct PreferencesView: View {
                             .foregroundStyle(.red)
                     }
                     Toggle("Pause when on battery", isOn: $engine.pauseOnBattery)
+                    Toggle("Pause in Low Power Mode", isOn: $engine.pauseOnLowPower)
+                    updateRow
                 }
                 .padding(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,18 +59,20 @@ struct PreferencesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            GroupBox("Lock Screen & Wallpaper Tile") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Add video to Wallpaper & Lock Screen", isOn: $aerialInstalled)
-                        .disabled(aerialBusy)
-                    if let aerialError {
-                        Text(aerialError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+            if AerialInstaller.isSupported {
+                GroupBox("Lock Screen & Wallpaper Tile") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Add video to Wallpaper & Lock Screen", isOn: $aerialInstalled)
+                            .disabled(aerialBusy)
+                        if let aerialError {
+                            Text(aerialError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
                     }
+                    .padding(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             HStack {
@@ -77,6 +82,42 @@ struct PreferencesView: View {
                 } label: {
                     Label("Quit LiveWall", systemImage: "power")
                 }
+            }
+        }
+    }
+
+    private var updateRow: some View {
+        HStack(spacing: 8) {
+            switch updateChecker.status {
+            case .idle:
+                Button("Check for Updates…") { updateChecker.checkNow() }
+                    .controlSize(.small)
+                Spacer()
+            case .checking:
+                Text("Checking for updates…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            case .upToDate:
+                Text("You're on the latest version (\(updateChecker.currentVersion))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            case .updateAvailable(let version):
+                Text("Version \(version) is available")
+                    .font(.caption)
+                Spacer()
+                Button("Download") {
+                    NSWorkspace.shared.open(UpdateChecker.releasesPageURL)
+                }
+                .controlSize(.small)
+            case .failed:
+                Text("Couldn't check for updates")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                Spacer()
+                Button("Retry") { updateChecker.checkNow() }
+                    .controlSize(.small)
             }
         }
     }

@@ -10,6 +10,8 @@ struct DisplayState: Identifiable, Equatable {
     var scaling: ScalingMode
     var isMuted: Bool
     var volume: Float
+    var trimStart: Double? = nil
+    var trimEnd: Double? = nil
 }
 
 /// The brain of the app. Owns one WallpaperScreenController per connected
@@ -18,6 +20,12 @@ struct DisplayState: Identifiable, Equatable {
 final class WallpaperEngine: ObservableObject {
     @Published private(set) var displayStates: [DisplayState] = []
     @Published var pauseOnBattery: Bool {
+        didSet {
+            persist()
+            updatePlaybackStates()
+        }
+    }
+    @Published var pauseOnLowPower: Bool {
         didSet {
             persist()
             updatePlaybackStates()
@@ -32,12 +40,22 @@ final class WallpaperEngine: ObservableObject {
     private var isSystemSleeping = false
     private var isSessionInactive = false
     private var isOnBattery = false
+    private var isLowPowerMode = false
     private var reconcileWorkItem: DispatchWorkItem?
     private var persistWorkItem: DispatchWorkItem?
 
     init() {
         settings = store.load()
         pauseOnBattery = settings.pauseOnBattery
+        pauseOnLowPower = settings.pauseOnLowPower
+        isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(powerStateChanged),
+            name: .NSProcessInfoPowerStateDidChange,
+            object: nil
+        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -98,6 +116,10 @@ final class WallpaperEngine: ObservableObject {
         var assignment = settings.assignments[displayKey]
             ?? StoredAssignment(bookmark: bookmark, scaling: .fill, muted: true, volume: 1.0)
         assignment.bookmark = bookmark
+        // A trim only makes sense for the clip it was made on, so a new
+        // video starts untrimmed.
+        assignment.trimStart = nil
+        assignment.trimEnd = nil
         settings.assignments[displayKey] = assignment
         persist()
 
@@ -154,6 +176,16 @@ final class WallpaperEngine: ObservableObject {
         settings.assignments[displayKey]?.muted = muted
         persist()
         controllers[displayKey]?.setMuted(muted)
+        rebuildDisplayStates()
+    }
+
+    func setTrim(start: Double?, end: Double?, for displayKey: String) {
+        guard settings.assignments[displayKey] != nil else { return }
+        settings.assignments[displayKey]?.trimStart = start
+        settings.assignments[displayKey]?.trimEnd = end
+        persist()
+        controllers[displayKey]?.setTrim(start: start, end: end)
+        updatePlaybackStates()
         rebuildDisplayStates()
     }
 
@@ -230,7 +262,9 @@ final class WallpaperEngine: ObservableObject {
             url: url,
             scaling: assignment.scaling,
             muted: assignment.muted,
-            volume: assignment.volume
+            volume: assignment.volume,
+            trimStart: assignment.trimStart,
+            trimEnd: assignment.trimEnd
         )
     }
 
@@ -256,9 +290,20 @@ final class WallpaperEngine: ObservableObject {
         updatePlaybackStates()
     }
 
+    @objc private func powerStateChanged() {
+        // This notification can arrive on any thread; everything in the
+        // engine assumes main.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+            self.updatePlaybackStates()
+        }
+    }
+
     private func updatePlaybackStates() {
         let globallyPaused = isSystemSleeping || isSessionInactive
             || (pauseOnBattery && isOnBattery)
+            || (pauseOnLowPower && isLowPowerMode)
         for controller in controllers.values {
             if controller.hasVideo && !globallyPaused && !controller.isOccluded {
                 controller.play()
@@ -274,6 +319,7 @@ final class WallpaperEngine: ObservableObject {
         persistWorkItem?.cancel()
         persistWorkItem = nil
         settings.pauseOnBattery = pauseOnBattery
+        settings.pauseOnLowPower = pauseOnLowPower
         store.save(settings)
     }
 
@@ -344,7 +390,9 @@ final class WallpaperEngine: ObservableObject {
                 videoURL: controller.videoURL,
                 scaling: assignment?.scaling ?? .fill,
                 isMuted: assignment?.muted ?? true,
-                volume: assignment?.volume ?? 1.0
+                volume: assignment?.volume ?? 1.0,
+                trimStart: assignment?.trimStart,
+                trimEnd: assignment?.trimEnd
             ))
         }
         // Reconciles fire on every screen-parameter notification, and most

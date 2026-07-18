@@ -31,7 +31,7 @@ struct SettingsView: View {
                 PreferencesView(engine: engine)
             }
         }
-        .frame(width: 380, height: 345)
+        .frame(width: 380, height: 376)
         .ignoresSafeArea()
     }
 }

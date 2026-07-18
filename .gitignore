@@ -14,3 +14,9 @@ dist/
 
 # macOS
 .DS_Store
+
+# Demo/screen recordings kept out of the repo (GitHub has a 100MB limit;
+# the README demo is handled separately)
+*.mov
+*.mp4
+*.gif
