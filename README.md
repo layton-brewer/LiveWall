@@ -1,113 +1,112 @@
 # LiveWall
 
-A free macOS menu bar app that turns any video into your desktop wallpaper —
-looping, muted, sitting behind your icons on every Space and every display.
+Puts a video on your desktop as wallpaper. That's it — no subscription, no
+account, no watermark, no "pro" version hiding behind a paywall. Download it
+and it works.
 
-No paywall, no watermark, no subscription, no license key, no account.
-Everything in it is available to everyone, always.
+### [Download the latest release →](https://github.com/layton-brewer/LiveWall/releases/latest)
 
 ## What it does
 
-- **Lives in the menu bar.** No Dock icon, no clutter. Click the icon, get a
-  small settings panel.
-- **Renders at the actual desktop level.** Each display gets its own
-  borderless, click-through window sitting right where the wallpaper picture
-  normally goes — above it, but still behind your desktop icons. It follows
-  you across every Space and stays invisible to Mission Control and Cmd+Tab.
-- **Handles any video, any size.** `.mov`, `.mp4`, `.m4v` — a tiny 480p clip
-  and a multi-gigabyte 8K file both just work, since AVFoundation streams and
-  hardware-decodes them straight off disk instead of loading them into memory.
-- **Loops seamlessly** with `AVQueuePlayer` + `AVPlayerLooper` — no visible
-  seam or stutter at the loop point.
-- **Every display is independent.** Different video, scaling mode
-  (Fill / Fit / Stretch), and mute/volume per screen. Drag a video onto a
-  display's card, or use the Choose… button.
-- **Copes with displays coming and going.** Plug in a monitor, unplug it,
-  plug it back in — its wallpaper comes back, remembered by the display's own
-  hardware ID rather than its position.
-- **Doesn't waste power.** Playback pauses automatically when a display is
-  fully covered by something (a fullscreen app, say), when the Mac sleeps,
-  and optionally whenever you're running on battery. Muted by default too.
-- **Remembers everything** — assignments survive quitting the app, restarting
-  the Mac, all of it.
-- **Launch at Login**, using Apple's current `SMAppService` API rather than
-  the deprecated one everyone copy-pastes from Stack Overflow.
-- **Optional screen saver mode.** Flip a toggle and LiveWall installs a real
-  screen saver module that plays your video. macOS files all third-party
-  screen savers under "Other" in System Settings — that's Apple's own
-  placement, not something an app can change.
-- **Optional native wallpaper + lock screen tile (experimental).** A second
-  toggle registers your video with macOS's own wallpaper system, so it gets
-  a real, top-level "LiveWall" section in System Settings → Wallpaper and →
-  Screen Saver, right next to Apple's own aerials — and picking it there also
-  puts it on the lock screen. This leans on an undocumented, reverse
-  engineered part of macOS, so treat it as a bonus rather than something to
-  depend on. See the comments in `AerialInstaller.swift` for the full story.
+Drop a video on a display in the app and it becomes your wallpaper — looping,
+muted, sitting right behind your desktop icons on every Space. Works with
+.mov, .mp4, and .m4v files of pretty much any size, since the video streams
+and decodes straight off disk instead of getting loaded into memory. An 8K
+file plays exactly the same as a small one.
 
-## Building it
+Lives in the menu bar, no Dock icon. Every display gets its own video, its
+own scaling mode (fill, fit, or stretch), and its own volume. Unplug a
+monitor and plug it back in later and its wallpaper comes back on its own.
+Everything's saved, so quitting the app or restarting the Mac doesn't lose
+anything.
 
-You need Xcode 16+ with a macOS 26+ SDK. No third-party dependencies, no
-Swift Package Manager, no CocoaPods — just open the project and build.
+It also knows when to stop working — playback pauses when a fullscreen app
+covers a display, when the Mac sleeps, and optionally whenever you're
+running on battery. There's a Launch at Login toggle too, built on Apple's
+current API instead of the deprecated one half the tutorials online still
+tell you to use.
+
+Two more things, both optional:
+
+- A real screen saver mode, if you'd rather the video kick in after being
+  idle. macOS files all third-party screen savers under "Other" in System
+  Settings — that's Apple's doing, not something an app can change.
+- A toggle that registers your video with macOS's own wallpaper system,
+  which gets it a real "LiveWall" section in System Settings instead of
+  being buried under Other, and even puts it on your lock screen. This
+  leans on undocumented behavior found by poking around macOS's own
+  wallpaper files, so treat it as a nice bonus rather than something
+  guaranteed to keep working forever. The comments in `AerialInstaller.swift`
+  have the full story if you're curious.
+
+## Getting it
+
+Easiest way is the [DMG from the latest release](https://github.com/layton-brewer/LiveWall/releases/latest)
+— drag LiveWall into Applications and you're done.
+
+It isn't signed with a paid Apple Developer certificate, so Gatekeeper will
+block it the first time you try to open it. Right-click the app and choose
+Open instead of double-clicking — you only have to do that once.
+
+## Building it yourself
+
+Needs Xcode 16+ with a macOS 26+ SDK. No dependencies to install and nothing
+to fetch, just open the project and build.
 
 ```sh
 open LiveWall.xcodeproj
-# or from the command line:
+```
+
+or from the command line:
+
+```sh
 xcodebuild -project LiveWall.xcodeproj -scheme LiveWall -configuration Release build
 ```
 
-## A note on distribution
+## Why it's not sandboxed
 
-Drawing a window at the desktop level isn't something the full macOS App
-Sandbox allows, so LiveWall is built **non-sandboxed** and can't go on the
-Mac App Store. If you hand a built copy to someone instead of having them
-build it themselves, Gatekeeper will block it on first launch — they'll need
-to right-click → Open once, or you'll need to sign and notarize it with a
-Developer ID certificate.
+Drawing a window at the actual desktop level isn't something Apple allows
+inside the App Sandbox, so this can't go on the Mac App Store. On the plus
+side, it also means building it yourself doesn't ask for any special
+permission — no Screen Recording, no TCC prompts. It's just a regular
+window sitting at an unusual window level.
 
-It doesn't need Screen Recording or any other special permission. Drawing
-the wallpaper window is just a normal window at an unusual level — no TCC
-entitlements involved.
+## Things that need a human to check
 
-## Things that need a human to verify
+Some of this only really shows itself with someone actually watching:
 
-Some behavior only really shows itself with a person in front of the screen:
+- Drop a video on a display → it becomes a looping wallpaper behind the icons
+- Survives switching Spaces and opening Mission Control
+- A fullscreen app pauses that display's playback; leaving fullscreen resumes it
+- Unplug and replug a monitor → its video comes back
+- Quit and reopen the app, or restart the Mac entirely → wallpapers are still there
+- "Pause on battery" actually pauses on unplug and resumes on AC
+- Launch at Login toggle actually adds and removes the login item
+- Screen saver toggle: turn it on, pick LiveWall under System Settings →
+  Screen Saver → Other, and check it plays after going idle. If it shows a
+  fallback message instead of your video, re-toggle it after (re)assigning
+  one — Apple's third-party screen saver host has had bugs on recent macOS
+  versions
 
-- [ ] Drop a `.mov` on a display card → it becomes a looping, muted wallpaper
-      behind your icons
-- [ ] The wallpaper survives Space switches and Mission Control
-- [ ] A fullscreen app on a display pauses that display's playback; leaving
-      fullscreen resumes it
-- [ ] Unplug and replug an external display → its assignment comes back
-- [ ] Quit and relaunch (and restart the Mac entirely) → wallpapers are
-      still there
-- [ ] "Pause when on battery" actually pauses on unplug, resumes on AC
-- [ ] Launch at Login toggle actually registers/unregisters the login item
-- [ ] Screen saver toggle: enable it, then pick "LiveWall" yourself under
-      System Settings → Screen Saver → Other, and confirm it plays after
-      idle. Apple's third-party screen saver host has had rough edges on
-      recent macOS versions — if it shows a fallback message instead of your
-      video, re-toggle it in LiveWall after (re)assigning a video
-
-## How it's organized
+## Code layout
 
 ```
 LiveWall/
-├── App/            App entry point — accessory app lifecycle, no Dock icon
-├── Core/           The actual engine: windows, players, persistence, power
-├── UI/             Menu bar item + the SwiftUI settings panel
-└── Resources/      App icon, accent color
-LiveWallSaver/       The bundled screen saver module (separate build target)
+├── App/            entry point, sets up the no-Dock-icon app lifecycle
+├── Core/           the actual engine — windows, players, persistence, power handling
+├── UI/             menu bar item + the settings panel
+└── Resources/      icon, accent color
+LiveWallSaver/       the screen saver module, built as its own target
 ```
 
 ## Contributing
 
-Pull requests welcome. It's a small, dependency-free codebase, so it should
-be easy to poke around in Xcode and figure out where things live. If you're
-touching the desktop-window-level code or the wallpaper/aerial tricks, it's
-worth reading the comments in those files first — there's real reverse
-engineering behind some of this and the reasoning matters.
+PRs welcome. It's a small codebase with zero dependencies, so it's easy to
+poke around in Xcode. If you're touching the desktop-window-level code or
+the wallpaper/screen-saver tricks, read the comments in those files first —
+there's real reverse engineering behind some of it and the reasoning
+matters more than usual.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Free for anyone to use, modify, and ship,
-including commercially.
+MIT. See [LICENSE](LICENSE) — use it, fork it, sell it, whatever.
