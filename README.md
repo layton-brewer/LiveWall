@@ -79,22 +79,6 @@ side, it also means building it yourself doesn't ask for any special
 permission — no Screen Recording, no TCC prompts. It's just a regular
 window sitting at an unusual window level.
 
-## Things that need a human to check
-
-Some of this only really shows itself with someone actually watching:
-
-- Drop a video on a display → it becomes a looping wallpaper behind the icons
-- Survives switching Spaces and opening Mission Control
-- A fullscreen app pauses that display's playback; leaving fullscreen resumes it
-- Unplug and replug a monitor → its video comes back
-- Quit and reopen the app, or restart the Mac entirely → wallpapers are still there
-- "Pause on battery" actually pauses on unplug and resumes on AC
-- Launch at Login toggle actually adds and removes the login item
-- Screen saver toggle: turn it on, pick LiveWall under System Settings →
-  Screen Saver → Other, and check it plays after going idle. If it shows a
-  fallback message instead of your video, re-toggle it after (re)assigning
-  one — Apple's third-party screen saver host has had bugs on recent macOS
-  versions
 
 ## Code layout
 
@@ -110,10 +94,7 @@ LiveWallSaver/       the screen saver module, built as its own target
 ## Contributing
 
 PRs welcome. It's a small codebase with zero dependencies, so it's easy to
-poke around in Xcode. If you're touching the desktop-window-level code or
-the wallpaper/screen-saver tricks, read the comments in those files first —
-there's real reverse engineering behind some of it and the reasoning
-matters more than usual.
+poke around in Xcode. 
 
 ## License
 
