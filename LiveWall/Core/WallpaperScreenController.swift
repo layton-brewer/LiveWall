@@ -65,6 +65,12 @@ final class WallpaperScreenController {
         accessingSecurityScope = url.startAccessingSecurityScopedResource()
 
         let item = AVPlayerItem(url: url)
+        // AVFoundation happily buffers a big chunk of video ahead by
+        // default, which adds up fast on an 8K file. This is a local file
+        // on a loop — a few seconds of read-ahead is plenty, and it keeps
+        // the memory footprint down.
+        item.preferredForwardBufferDuration = 5
+
         let queuePlayer = AVQueuePlayer()
         queuePlayer.isMuted = muted
         queuePlayer.volume = volume

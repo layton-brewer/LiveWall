@@ -13,9 +13,13 @@ final class MemoryUsageMonitor: ObservableObject {
 
     init() {
         sample()
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sample() }
         }
+        // The exact moment we sample doesn't matter at all, so give the
+        // system room to batch this wakeup with others and save power.
+        timer.tolerance = 0.5
+        self.timer = timer
     }
 
     deinit {
@@ -24,7 +28,13 @@ final class MemoryUsageMonitor: ObservableObject {
 
     private func sample() {
         guard let bytes = Self.currentPhysicalFootprintBytes() else { return }
-        usageMB = Double(bytes) / 1_048_576
+        let megabytes = Double(bytes) / 1_048_576
+        // The label only shows whole megabytes, so only publish when the
+        // displayed number would actually change — otherwise this would
+        // poke SwiftUI into a pointless re-render every two seconds.
+        if Int(megabytes.rounded()) != Int(usageMB.rounded()) {
+            usageMB = megabytes
+        }
     }
 
     /// Physical memory footprint, in bytes — the same number Activity

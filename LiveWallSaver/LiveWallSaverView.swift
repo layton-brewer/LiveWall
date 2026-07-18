@@ -63,6 +63,11 @@ final class LiveWallSaverView: ScreenSaverView {
         guard playerLayer == nil, let url = Self.configuredVideoURL() else { return }
 
         let item = AVPlayerItem(url: url)
+        // Same reasoning as the main app: it's a local file on a loop, so
+        // cap the read-ahead buffer instead of letting AVFoundation hold
+        // a big chunk of an 8K video in memory.
+        item.preferredForwardBufferDuration = 5
+
         let queuePlayer = AVQueuePlayer()
         queuePlayer.isMuted = true
         queuePlayer.preventsDisplaySleepDuringVideoPlayback = false

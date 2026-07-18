@@ -30,8 +30,10 @@ final class WallpaperEngine: ObservableObject {
 
     private let powerMonitor = PowerMonitor()
     private var isSystemSleeping = false
+    private var isSessionInactive = false
     private var isOnBattery = false
     private var reconcileWorkItem: DispatchWorkItem?
+    private var persistWorkItem: DispatchWorkItem?
 
     init() {
         settings = store.load()
@@ -60,6 +62,17 @@ final class WallpaperEngine: ObservableObject {
         workspaceCenter.addObserver(
             self, selector: #selector(systemDidWake),
             name: NSWorkspace.screensDidWakeNotification, object: nil
+        )
+        // Fast user switching: the desktop window doesn't count as occluded
+        // while another user's session is up, so without these the video
+        // would keep decoding for a desktop nobody can see.
+        workspaceCenter.addObserver(
+            self, selector: #selector(sessionResignedActive),
+            name: NSWorkspace.sessionDidResignActiveNotification, object: nil
+        )
+        workspaceCenter.addObserver(
+            self, selector: #selector(sessionBecameActive),
+            name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil
         )
 
         isOnBattery = PowerMonitor.isOnBattery()
@@ -147,12 +160,18 @@ final class WallpaperEngine: ObservableObject {
     func setVolume(_ volume: Float, for displayKey: String) {
         guard settings.assignments[displayKey] != nil else { return }
         settings.assignments[displayKey]?.volume = volume
-        persist()
+        // Dragging the volume slider fires this many times a second, and
+        // each save means JSON-encoding everything and writing to disk.
+        // The player gets the new volume immediately; the save can wait
+        // until the slider settles.
+        schedulePersist()
         controllers[displayKey]?.setVolume(volume)
         rebuildDisplayStates()
     }
 
     func shutdown() {
+        // Flush any save that's still sitting in the debounce window.
+        persist()
         for controller in controllers.values {
             controller.tearDown()
         }
@@ -227,8 +246,19 @@ final class WallpaperEngine: ObservableObject {
         updatePlaybackStates()
     }
 
+    @objc private func sessionResignedActive() {
+        isSessionInactive = true
+        updatePlaybackStates()
+    }
+
+    @objc private func sessionBecameActive() {
+        isSessionInactive = false
+        updatePlaybackStates()
+    }
+
     private func updatePlaybackStates() {
-        let globallyPaused = isSystemSleeping || (pauseOnBattery && isOnBattery)
+        let globallyPaused = isSystemSleeping || isSessionInactive
+            || (pauseOnBattery && isOnBattery)
         for controller in controllers.values {
             if controller.hasVideo && !globallyPaused && !controller.isOccluded {
                 controller.play()
@@ -241,8 +271,22 @@ final class WallpaperEngine: ObservableObject {
     // MARK: - Persistence
 
     private func persist() {
+        persistWorkItem?.cancel()
+        persistWorkItem = nil
         settings.pauseOnBattery = pauseOnBattery
         store.save(settings)
+    }
+
+    /// A save that waits half a second before hitting the disk, for values
+    /// that change in rapid bursts. Any direct persist() call in the
+    /// meantime writes everything anyway, so nothing can get lost — the
+    /// only way to skip a pending save entirely is quitting, and
+    /// shutdown() flushes for that.
+    private func schedulePersist() {
+        persistWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in self?.persist() }
+        persistWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
     static func makeBookmark(for url: URL) throws -> Data {
@@ -303,6 +347,11 @@ final class WallpaperEngine: ObservableObject {
                 volume: assignment?.volume ?? 1.0
             ))
         }
-        displayStates = states
+        // Reconciles fire on every screen-parameter notification, and most
+        // of the time nothing user-visible changed. Publishing only real
+        // changes saves SwiftUI from re-rendering the panel for nothing.
+        if states != displayStates {
+            displayStates = states
+        }
     }
 }
