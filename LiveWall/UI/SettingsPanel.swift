@@ -24,7 +24,12 @@ final class SettingsPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hidesOnDeactivate = false
-        isMovableByWindowBackground = true
+        // Dragging a SwiftUI slider inside a hosted view reads as a
+        // "background" drag to AppKit, so with background-dragging on, the
+        // whole window moves instead of the slider knob. The panel anchors
+        // itself under the menu bar on every open anyway, so window
+        // dragging isn't worth broken sliders.
+        isMovableByWindowBackground = false
         isExcludedFromWindowsMenu = true
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
